@@ -240,3 +240,71 @@ public interface MyInterface {
 - 2. 인터페이스 본연의 추상화 목적 유지 – 인터페이스는 여전히 계약(Contract) 역할에 충실해야 하며, 복잡한 로직은 클래스 쪽에 두는 것이 바람직
 - 3. 다중 상속(충돌) 문제 – 여러 인터페이스에서 동일 시그니처의 디폴트 메서드가 있을 경우, 구현 클래스에서 반드시 충돌을 해결해야 함
 - 4. 상태(state)를 두지 말 것 – 디폴트 메서드는 메서드 구현부만 제공하는 것이며, 인터페이스에 인스턴스 상태를 가지는 것은 지양
+
+
+### 병렬 스트림
+1. 단일 스트림 vs 멀티스레드
+   - 단일 스트림: 코드가 간단하지만, 한 번에 하나의 스레드만 실행되어 시간이 오래 걸린다.
+   -  멀티스레드: 여러 스레드를 직접 생성해 병렬로 작업을 처리할 수 있으나, 스레드 생성, 관리, 예외 처리 등이 복잡해진다.
+2. 스레드 풀(ExecutorService)
+   - 스레드를 직접 생성, 제어하는 대신, 자바가 제공하는 스레드 풀을 활용해 멀티스레드를 더 쉽게 사용할 수있다.
+   - submit(Callable) 과 Future 를 통해 작업을 비동기로 처리하고, 결과를 손쉽게 받아올 수 있다.
+3. Fork/Join 패턴과 Fork/Join 프레임워크
+   - 큰 작업을 잘게 분할(Fork) 한 뒤 여러 스레드가 병렬로 처리하고, 최종 결과를 합치기(Join) 하는 전형적인 병렬 처리 패턴이다.
+   - 자바의 Fork/Join 프레임워크( ForkJoinPool , RecursiveTask , RecursiveAction )는 이러한 패턴을 편리하게 지원한다.
+   - 작업 훔치기(Work-Stealing) 알고리즘을 통해 각 스레드가 할당받은 작업이 없으면, 다른 스레드의 큐에있는 작업을 훔쳐서 효율적으로 분산 처리한다.
+   - CPU 바운드 작업(계산 집약적)일 때 최적의 효과를 낸다.
+4. 자바 병렬 스트림
+   - 람다 스트림에서 parallel() 한 줄만 추가해도 내부적으로 Fork/Join 공용 풀을 사용하여 자동으로 병렬 처리한다.
+   - 개발자는 복잡한 멀티스레드 코드를 짤 필요 없이 선언적으로 병렬 연산을 수행할 수 있다.
+   - 단점: 공용 풀을 공유하므로, I/O 대기 작업이나 동시 요청이 많아지는 상황에서 병목 현상이 발생할 수 있다.
+5. 병렬 스트림 사용 시 주의사항
+   - CPU 바운드(계산 집약적) 작업에만 사용하는 것이 권장된다.
+   - I/O 바운드 작업(DB 조회, 외부 API 호출 등)은 오랜 대기 시간이 발생하므로, 제한된 스레드만 쓰는 Fork/Join 공용 풀과 궁합이 좋지 않다.
+   - 서버 환경에서 여러 요청이 동시에 병렬 스트림을 사용하면 공용 풀이 빠르게 포화되어 전체 성능이 저하될 수 있다(특히 I/O 바운드 작업을 병렬 스트림으로 사용하면 더 큰 문제).
+6. 별도의 풀 사용
+   - I/O 바운드 작업처럼 대기가 긴 경우에는 전용 스레드 풀(ExecutorService)을 만들어 사용하는 것을 권장한다.
+   - 스레드 풀의 크기, 스레드 생성 정책, 큐 타입 등을 상황에 맞게 튜닝할 수 있어 확장성과 안정성이 높아진다.
+   
+**결론**
+   - 자바 병렬 스트림은 CPU 바운드 작업을 빠르고 쉽게 병렬 처리하기에는 좋지만, 공용 풀을 이용한다는 점에서 I/
+   O 바운드나 동시 요청이 많은 시스템에는 주의가 필요하다.
+   - 병렬 스트림만으로 모든 병렬 처리를 해결하려 하기보다는, 작업 특성(CPU 바운드 vs I/O 바운드)과 시스템 환
+   경(서버 동시 요청, 리소스 상황)을 고려하여 Fork/Join 프레임워크 또는 별도의 스레드 풀을 적절히 조합해 사
+   용하는 것이 중요하다.
+
+**CompletableFuture와 주의 사항**
+  - 특히 실무에서 자주 하는 실수가 병렬 스트림을 I/O 대기 작업에 사용하거나, 또는 CompletableFuture 를 사용할
+때 발생한다. 
+  - 병렬 스트림은 처음부터 Fork/Join 공용 풀과 함께 사용하도록 설계되었다. 따라서 반드시 CPU 바운드 작업에
+사용해야 한다. 
+  - I/O 대기 작업에 사용하면 Fork/Join 공용 풀의 스레드 병목으로 모든 요청이 밀리는 큰 장애가 발생하기
+쉽다. 
+  - 실무에서 복잡한 멀티스레드 코드를 작성할 때는 CompletableFuture 가 도움이 된다.
+우리는 멀티스레드, 스레드 풀, Future , 람다, 스트림을 모두 학습했기 때문에 어렵지 않게
+CompletableFuture 를 이해할 수 있을 것이다. ( CompletableFuture 는 실무에서 필요할 때 찾아서 학
+습하면 충분하다.)
+  - CompletableFuture 를 생성할 때는 별도의 스레드 풀을 반드시 지정해야 한다. 그렇지 않으면 Fork/Join
+공용 풀이 대신 사용된다. 이 때문에 많은 장애가 발생한다. CompletableFuture 를 사용할 때는 반드시! 커스
+텀 풀을 지정해서 사용하자!
+  
+
+**CompletableFuture의 주의점**
+
+```java
+package parallel.forkjoin;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import static util.MyLogger.*;
+public class CompletableFutureMain {
+ public static void main(String[] args) {
+ CompletableFuture.runAsync(() -> log("Fork/Join")); // Fork/Join 공용 풀
+ ExecutorService es = Executors.newFixedThreadPool(100);
+ CompletableFuture.runAsync(() -> log("Custom Pool"), es); // 별도의 풀
+ es.close();
+ }
+}
+```
+첫 번째 예제는 별도의 스레드 풀을 지정하지 않았다.
+두 번째 예제는 별도의 스레드 풀( es )을 지정했다.
